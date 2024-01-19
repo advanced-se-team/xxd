@@ -65,9 +65,9 @@ def pptool(img_path, savepath):
     # im_show = Image.fromarray(im_show)
     # im_show.save('result.jpg')
 
-if __name__ == '__main__':
+if __name__ == '__main__': # 解析图片和表格 时间较长，不继续演示
 
-    PDFDir = 'Kingsbury and Alvaro - 2020 - Elle inferring isolation anomalies from experimen(1).pdf'
+    PDFDir = 'icse2023a.pdf'
 
     #pdf每页截图代码
     sTime = time.time()

@@ -1,3 +1,4 @@
+import json
 import os.path
 from time import sleep
 
@@ -10,6 +11,22 @@ from pdfminer.layout import LTTextContainer, LTChar, LAParams
 from docx.oxml import OxmlElement
 
 def extract_text(dox_dir: str):
+
+    text = {
+        "Title": "",
+        "Navigation Bra": "null",
+        "AuthorInfo": "",
+        "Abstract": "",
+        "Content": [],
+    }
+    textContent = {
+        "Title": "",
+        "Content": "",
+        "Below": [],
+        "Grade": 0,
+    }
+    storedText = []
+
     # 打开Word文档
     doc = Document(dox_dir)
     navigationBra = 1
@@ -23,15 +40,18 @@ def extract_text(dox_dir: str):
     toc = pdf.get_toc()  # 获取pdf目录
     catalogue = []
     for t in toc:
-        if t[0] == 1:
+        # if t[0] == 1:
         # print(t)
-            catalogue.append(t[1].lower())
+        catalogue.append(t[1].lower())
     # print(catalogue)
 
     abstract = 0 if 'abstract' in catalogue else 1
 
     # 遍历文档中的段落并打印文本内容
+    test = 1
     for paragraph in doc.paragraphs:
+
+
         tmp = paragraph.text.replace(" ", "").replace("\n", "")
         if not tmp:
             continue
@@ -64,20 +84,25 @@ def extract_text(dox_dir: str):
             navigationBra = 0
             authorContent = 1
             paperDict.update({contentType: content})
+            text["Title"] = content
 
         elif navigationBra == 1:
             contentType = 'Navigation Bra'
             content = paragraph.text
             navigationBra = 0
             paperDict.update({contentType: content})
+            text["Navigation Bra"] = content
 
         elif alignment == 1 and authorContent == 1:
             contentType = 'Authors Information'
             content = paragraph.text
             if not contentType in paperDict:
                 paperDict[contentType] = paragraph.text
+                text["AuthorInfo"] = content
             else:
                 paperDict[contentType] += '\n' + paragraph.text
+                text["AuthorInfo"] += '\n' + content
+
 
         elif alignment == 3 and abstract == 1:
             authorContent = 0
@@ -85,14 +110,35 @@ def extract_text(dox_dir: str):
             content = paragraph.text
             if not contentType in paperDict:
                 paperDict[contentType] = paragraph.text
+                text["Abstract"] = content
             else:
                 paperDict[contentType] += '\n' + paragraph.text
+                text["Abstract"] += '\n' + content
 
         else:
             authorContent = 0
             abstract = 0
             if paragraph.text.lower() in catalogue:
                 contentType2 = paragraph.text
+
+                if textContent["Title"]:
+                    storedText.append({
+                        "Title": textContent["Title"],
+                        "Content": textContent["Content"],
+                        "Below": [],
+                        "Grade": textContent["Grade"],
+                    })
+                    # print(f'test here:\n{textContent["Title"]}\n\ntest over\n')
+                textContent["Title"] = paragraph.text
+                textContent["Content"] = ""
+                change = 1
+                for t in toc:
+                    if paragraph.text.lower() == t[1].lower():
+                        textContent["Grade"] = t[0]
+                        break
+
+            else:
+                change = 0
             # else:
             #     logger.debug(f'paragraph.text = \n{paragraph.text}\ncatalogue2 = \n{catalogue}')
             if not contentType2 in paperDict:
@@ -100,8 +146,70 @@ def extract_text(dox_dir: str):
             else:
                 paperDict[contentType2] += '\n' + paragraph.text
 
+            if change == 0:
+                textContent["Content"] += '\n' + paragraph.text
+
+        test += 1
+        # if test == 36:
+        #     break
+
+    storedText.append({
+        "Title": textContent["Title"],
+        "Content": textContent["Content"],
+        "Below": [],
+        "Grade": textContent["Grade"],
+    })
+    # print(f'test here:\n{textContent["Title"]}\n\ntest over\n')
+
+
+    # print(f'test2 here:\n{len(storedText)}\n\ntest2 over\n')
+    # print(storedText)
+    num = len(storedText)
+    for i in range(num):
+        # print(storedText[i])
+        # print(f'test2 here:\n{storedText[i]["Grade"]}\n{storedText[i]["Title"]}\ntest2 over\n')
+        if storedText[i]["Grade"] == 1:
+            res = getRelation(storedText, i)
+            # print(f'test1 here:\n{res}\n\ntest1 over\n')
+            # print(f'test3 here:\n{text}\n\ntest3 over\n')
+            belowcontent = []
+            for item in res["Below"]:
+                belowcontent.append(item)
+            text["Content"].append({
+                "Title": res["Title"],
+                "Content": res["Content"],
+                "Below": belowcontent,
+                "Grade": res["Grade"],
+            })
+            # print(f'test2 here:\n{text}\n\ntest2 over\n')
+
+
+    print(text)
+    with open('work_file', 'w') as f:
+        json.dump(text, f) #ensure_ascii=False
+    sleep(2)
 
     return paperDict
+
+def getRelation(storedText: [], i: int):
+    for j in range(i + 1, len(storedText)):
+        if storedText[j]["Grade"] > storedText[i]["Grade"] and storedText[j]["Grade"] == storedText[i]["Grade"] + 1:
+            # print(f'test3 here:\n{storedText[i]["Grade"]}\n{storedText[i]["Title"]}\ntest3 over\n')
+            # print(f'test4 here:\n{storedText[j]["Grade"]}\n{storedText[j]["Title"]}\ntest4 over\n')
+            res = getRelation(storedText, j)
+            belowcontent = []
+            for item in res["Below"]:
+                belowcontent.append(item)
+            storedText[i]["Below"].append({
+                "Title": res["Title"],
+                "Content": res["Content"],
+                "Below": belowcontent,
+                "Grade": res["Grade"],
+            })
+        else:
+            # print('pass\n')
+            return storedText[i]
+    return storedText[i]
 
 def pdf_to_docx(PDFDir):
     convertapi.api_secret = 'NiINCWmQ2PYMdDRU'
@@ -202,12 +310,12 @@ if __name__ == '__main__':
                             # print(f"字距: {width}, 行距: {adv}")
                             # break
 
-    # doc = fitz.open('icse2023a.pdf')
-    # toc = doc.get_toc()  # 获取pdf目录
-    # catalogue = []
-    # for t in toc:
-    #     if t[0] == 1:
-    #         print(t[1])
-    #         catalogue.append(t[1].lower())
+    doc = fitz.open('icse2023a.pdf')
+    toc = doc.get_toc()  # 获取pdf目录
+    catalogue = []
+    for t in toc:
+        # if t[0] == 1:
+            print(t)
+            # catalogue.append(t[1].lower())
     #
     # print(catalogue)
